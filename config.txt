@@ -1,0 +1,5 @@
+#this is a comment
+#username
+username: root
+#password
+password: dba123
