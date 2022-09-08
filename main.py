@@ -1,4 +1,5 @@
-#import dearpygui.dearpygui as dpg  #pip install dearpygui
+import dearpygui.dearpygui as gui           #pip install dearpygui
+import dearpygui.demo as demo
 from mysql.connector import connect, Error  #pip install mysql-connector-python
 from sys import argv
 import time
@@ -45,14 +46,16 @@ def closeDriverAndBuff(driver, cmdBuff):
     log("Closing connection and command buffer")
     cmdBuff.close()
     driver.close()
+
 def Q_createDB(driver, cmdBuff):
     log("Creating a new database")
     cmdBuff.execute("CREATE DATABASE library")
     cmdBuff.execute("USE library")
     cmdBuff.execute('''
     CREATE TABLE books(
-    name  VARCHAR(100)  NOT NULL PRIMARY KEY,
-    id    INT           NOT NULL
+    name       VARCHAR(100)  NOT NULL PRIMARY KEY,
+    id         INT           NOT NULL,
+    available  BOOL          NOT NULL
     )
     ''')
     cmdBuff.execute('''
@@ -74,10 +77,10 @@ def Q_dbContextInit(driver, cmdBuff):
     log("Setting up database context")
     cmdBuff.execute("USE library")
     driver.commit()
-def Q_insertBook(name, id, genre, authors, publisher, driver, cmdBuff):
+def Q_insertBookWithMeta(name, id, genre, authors, publisher, available, driver, cmdBuff):
     if publisher == "": publisher = "null"
     log("Inserting book:", [name, id, genre, authors, publisher])
-    cmdBuff.execute("INSERT INTO books VALUES(\""+name+"\","+str(id)+")")
+    cmdBuff.execute("INSERT INTO books VALUES(\""+name+"\","+str(id)+","+str(available)+")")
     cmdBuff.execute("INSERT INTO bookMeta VALUES("+str(id)+",\""+genre+"\",\""+authors+"\",\""+publisher+"\")")
     driver.commit()
 def Q_insertMember(name, id, driver, cmdBuff):
@@ -93,6 +96,17 @@ def Q_getHighestBookID(driver, cmdBuff):
     if result[0][0] == None: id = 0
     else: id = result[0][0]
     return id
+def Q_getBooks(driver, cmdBuff):
+    log("Getting all books")
+    cmdBuff.execute("SELECT * FROM books")
+    global books
+    books = cmdBuff.fetchall()
+    driver.commit()
+    
+
+gui.create_context()
+gui.create_viewport()
+gui.setup_dearpygui()
 
 try:
     driver, cmdBuff = openDriverAndBuff()
@@ -110,12 +124,36 @@ try:
             genre = row[3]
             if row[1] == "": continue
             if genre  == "": genre = row[2]
-            Q_insertBook(row[0], hid, genre, row[1], row[5], driver, cmdBuff)
+            Q_insertBookWithMeta(row[0], hid, genre, row[1], row[5], True, driver, cmdBuff)
             hid += 1
-   
-    closeDriverAndBuff(driver, cmdBuff)
+    
+    with gui.window(label="idk"):
+        gui.add_button(label="show metrics", callback=lambda:gui.show_tool(gui.mvTool_Metrics))
+        gui.add_button(label="show imgui demo", callback=lambda:demo.show_demo())
+    with gui.window(label="books"):
+        gui.add_button(label="refresh", callback=lambda:Q_getBooks(driver, cmdBuff))
+        with gui.table(header_row=True, row_background=True, borders_outerH=True, borders_innerV=True, borders_outerV=True, resizable=True):
+            gui.add_table_column(label="ID")
+            gui.add_table_column(label="NAME")
+            gui.add_table_column(label="AVAILABLE")
+            Q_getBooks(driver, cmdBuff)
+            for i in books:
+                with gui.table_row():
+                    a = "false"
+                    if i[2]==1: a="true"
+                    gui.add_text(i[0])
+                    gui.add_text(i[1])
+                    gui.add_text(a)
+
 except Error as e:
     print("\nMYSQL ERROR")
     print(e)
     print("username:", username)
     print("password:", password)
+    exit()
+
+gui.show_viewport()
+gui.start_dearpygui()
+gui.destroy_context()
+
+closeDriverAndBuff(driver, cmdBuff)
