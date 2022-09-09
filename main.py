@@ -5,6 +5,11 @@ from sys import argv
 import time
 import csv
 
+'''
+Format of csv file
+Title, Authors, Genre, Publisher
+'''
+
 try: f = open("config.txt", "r")
 except FileNotFoundError:
     print("config.txt file not found")
@@ -32,11 +37,16 @@ if(field != None):
     exit()
     
 shouldCreateDB = False
-bookFile = None
+books = None
 for i in argv:
     arg = i.lower()
     if(arg == "-c"): shouldCreateDB = True
-    if(arg.startswith("-file:")): bookFile = i[len("-file:"):]
+    if(arg.startswith("-file:")): books = i[len("-file:"):]
+if books != None:
+    try: books = open(books, "r")
+    except FileNotFoundError:
+        print(books, "is not a valid path")
+        exit()
 
 def openDriverAndBuff():
     log("Opening connection and command buffer")
@@ -77,7 +87,7 @@ def Q_dbContextInit(driver, cmdBuff):
     log("Setting up database context")
     cmdBuff.execute("USE library")
     driver.commit()
-def Q_insertBookWithMeta(name, id, genre, authors, publisher, available, driver, cmdBuff):
+def Q_insertBookWithMeta(name, genre, authors, publisher, id, available, driver, cmdBuff):
     if publisher == "": publisher = "null"
     log("Inserting book:", [name, id, genre, authors, publisher])
     cmdBuff.execute("INSERT INTO books VALUES(\""+name+"\","+str(id)+","+str(available)+")")
@@ -102,12 +112,11 @@ def Q_getBooks(driver, cmdBuff):
     global books
     books = cmdBuff.fetchall()
     driver.commit()
-    
 
 gui.create_context()
 gui.create_viewport()
 gui.setup_dearpygui()
-
+    
 try:
     driver, cmdBuff = openDriverAndBuff()
 
@@ -116,15 +125,11 @@ try:
     
     hid = Q_getHighestBookID(driver, cmdBuff)
     
-    if(bookFile != None):
-        books = open(bookFile, "r")
+    if(books != None):
         reader = csv.reader(books)
         next(reader)
         for row in reader:
-            genre = row[3]
-            if row[1] == "": continue
-            if genre  == "": genre = row[2]
-            Q_insertBookWithMeta(row[0], hid, genre, row[1], row[5], True, driver, cmdBuff)
+            Q_insertBookWithMeta(row[0], row[2], row[1], row[3], hid, True, driver, cmdBuff)
             hid += 1
     
     with gui.window(label="idk"):
@@ -133,18 +138,18 @@ try:
     with gui.window(label="books"):
         gui.add_button(label="refresh", callback=lambda:Q_getBooks(driver, cmdBuff))
         with gui.table(header_row=True, row_background=True, borders_outerH=True, borders_innerV=True, borders_outerV=True, resizable=True):
-            gui.add_table_column(label="ID")
             gui.add_table_column(label="NAME")
+            gui.add_table_column(label="ID")
             gui.add_table_column(label="AVAILABLE")
             Q_getBooks(driver, cmdBuff)
             for i in books:
                 with gui.table_row():
-                    a = "false"
-                    if i[2]==1: a="true"
+                    a = "true"
+                    if i[2] != True: a="false"
                     gui.add_text(i[0])
                     gui.add_text(i[1])
                     gui.add_text(a)
-
+                    
 except Error as e:
     print("\nMYSQL ERROR")
     print(e)
