@@ -56,7 +56,7 @@ def closeDriverAndBuff(driver, cmdBuff):
     log("Closing connection and command buffer")
     cmdBuff.close()
     driver.close()
-
+  
 def Q_createDB(driver, cmdBuff):
     log("Creating a new database")
     cmdBuff.execute("CREATE DATABASE library")
@@ -79,7 +79,8 @@ def Q_createDB(driver, cmdBuff):
     id         INT          NOT NULL PRIMARY KEY,
     genre      VARCHAR(30)  NOT NULL,
     authors    VARCHAR(30)  NOT NULL,
-    publisher  VARCHAR(20)
+    publisher  VARCHAR(20)  NOT NULL,
+    b_count    INT          NOT NULL
     )
     ''')
     driver.commit()
@@ -89,9 +90,9 @@ def Q_dbContextInit(driver, cmdBuff):
     driver.commit()
 def Q_insertBookWithMeta(name, genre, authors, publisher, id, available, driver, cmdBuff):
     if publisher == "": publisher = "null"
-    log("Inserting book:", [name, id, genre, authors, publisher])
+    log("Inserting book:", [name, genre, authors, publisher, id])
     cmdBuff.execute("INSERT INTO books VALUES(\""+name+"\","+str(id)+","+str(available)+")")
-    cmdBuff.execute("INSERT INTO bookMeta VALUES("+str(id)+",\""+genre+"\",\""+authors+"\",\""+publisher+"\")")
+    cmdBuff.execute("INSERT INTO bookMeta VALUES("+str(id)+",\""+genre+"\",\""+authors+"\",\""+publisher+"\",0)")
     driver.commit()
 def Q_insertMember(name, id, driver, cmdBuff):
     log("Inserting member:", name, id)
@@ -113,52 +114,53 @@ def Q_getBooks(driver, cmdBuff):
     books = cmdBuff.fetchall()
     driver.commit()
 
-gui.create_context()
-gui.create_viewport()
-gui.setup_dearpygui()
-    
-try:
-    driver, cmdBuff = openDriverAndBuff()
+def main():
+    try:
+        driver, cmdBuff = openDriverAndBuff()
 
-    if(shouldCreateDB): Q_createDB(driver, cmdBuff)
-    else: Q_dbContextInit(driver, cmdBuff)
-    
-    hid = Q_getHighestBookID(driver, cmdBuff)
-    
-    if(books != None):
-        reader = csv.reader(books)
-        next(reader)
-        for row in reader:
-            Q_insertBookWithMeta(row[0], row[2], row[1], row[3], hid, True, driver, cmdBuff)
-            hid += 1
-    
-    with gui.window(label="idk"):
-        gui.add_button(label="show metrics", callback=lambda:gui.show_tool(gui.mvTool_Metrics))
-        gui.add_button(label="show imgui demo", callback=lambda:demo.show_demo())
-    with gui.window(label="books"):
-        gui.add_button(label="refresh", callback=lambda:Q_getBooks(driver, cmdBuff))
-        with gui.table(header_row=True, row_background=True, borders_outerH=True, borders_innerV=True, borders_outerV=True, resizable=True):
-            gui.add_table_column(label="NAME")
-            gui.add_table_column(label="ID")
-            gui.add_table_column(label="AVAILABLE")
-            Q_getBooks(driver, cmdBuff)
-            for i in books:
-                with gui.table_row():
-                    a = "true"
-                    if i[2] != True: a="false"
-                    gui.add_text(i[0])
-                    gui.add_text(i[1])
-                    gui.add_text(a)
-                    
-except Error as e:
-    print("\nMYSQL ERROR")
-    print(e)
-    print("username:", username)
-    print("password:", password)
-    exit()
+        if(shouldCreateDB): Q_createDB(driver, cmdBuff)
+        else: Q_dbContextInit(driver, cmdBuff)
+        
+        hid = Q_getHighestBookID(driver, cmdBuff)
+        
+        if(books != None):
+            reader = csv.reader(books)
+            next(reader)
+            for row in reader:
+                Q_insertBookWithMeta(row[0], row[2], row[1], row[3], hid, True, driver, cmdBuff)
+                hid += 1
 
-gui.show_viewport()
-gui.start_dearpygui()
-gui.destroy_context()
+        with gui.window(label="idk"):
+            gui.add_button(label="show metrics", callback=lambda:gui.show_tool(gui.mvTool_Metrics))
+            gui.add_button(label="show imgui demo", callback=lambda:demo.show_demo())
+        with gui.window(label="books"):
+                with gui.table(header_row=True, row_background=True, borders_outerH=True, borders_innerV=True, borders_outerV=True, resizable=True):
+                    gui.add_table_column(label="NAME")
+                    gui.add_table_column(label="ID")
+                    gui.add_table_column(label="AVAILABLE")
+                    Q_getBooks(driver, cmdBuff)
+                    for i in books:
+                        with gui.table_row():
+                            a = "true"
+                            if i[2] != True: a="false"
+                            gui.add_text(i[0])
+                            gui.add_text(i[1])
+                            gui.add_text(a)
+                        
+    except Error as e:
+        print("\nMYSQL ERROR")
+        print(e)
+        print("username:", username)
+        print("password:", password)
+        exit()
 
-closeDriverAndBuff(driver, cmdBuff)
+    closeDriverAndBuff(driver, cmdBuff)
+
+if __name__ == "__main__":
+    gui.create_context()
+    gui.create_viewport()
+    gui.setup_dearpygui()
+    main()
+    gui.show_viewport()
+    while gui.is_dearpygui_running(): gui.render_dearpygui_frame()  
+    gui.destroy_context()
