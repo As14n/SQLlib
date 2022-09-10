@@ -64,23 +64,28 @@ def Q_createDB():
     cmdBuff.execute('''
     CREATE TABLE books(
     name       VARCHAR(100)  NOT NULL PRIMARY KEY,
-    id         INT           NOT NULL,
-    available  BOOL          NOT NULL
+    id         INT           NOT NULL
     )
     ''')
     cmdBuff.execute('''
     CREATE TABLE members(
-    id    INT          NOT NULL PRIMARY KEY,
-    name  VARCHAR(30)  NOT NULL
+    id        INT          NOT NULL PRIMARY KEY,
+    name      VARCHAR(30)  NOT NULL
     )
     ''')
     cmdBuff.execute('''
-    CREATE TABLE bookMeta(
+    CREATE TABLE bookMetas(
     id         INT          NOT NULL PRIMARY KEY,
     genre      VARCHAR(30)  NOT NULL,
     authors    VARCHAR(30)  NOT NULL,
     publisher  VARCHAR(20)  NOT NULL,
-    b_count    INT          NOT NULL
+    i_count    INT          NOT NULL
+    )
+    ''')
+    cmdBuff.execute('''
+    CREATE TABLE issues(
+    book_id    INT  NOT NULL,
+    member_id  INT  NOT NULL
     )
     ''')
     driver.commit()
@@ -91,8 +96,8 @@ def Q_dbContextInit():
 def Q_insertBookWithMeta(name, genre, authors, publisher, id, available):
     if publisher == "": publisher = "null"
     log("Inserting book:", [name, genre, authors, publisher, id])
-    cmdBuff.execute("INSERT INTO books VALUES(\""+name+"\","+str(id)+","+str(available)+")")
-    cmdBuff.execute("INSERT INTO bookMeta VALUES("+str(id)+",\""+genre+"\",\""+authors+"\",\""+publisher+"\",0)")
+    cmdBuff.execute("INSERT INTO books VALUES(\""+name+"\","+str(id)+")")
+    cmdBuff.execute("INSERT INTO bookMetas VALUES("+str(id)+",\""+genre+"\",\""+authors+"\",\""+publisher+"\",0)")
     driver.commit()
 def Q_insertMember(name, id):
     log("Inserting member:", name, id)
@@ -109,17 +114,21 @@ def Q_getHighestBookID():
     return id
 def Q_getBooks():
     log("Getting all books")
-    cmdBuff.execute("SELECT * FROM books")
+    cmdBuff.execute("SELECT name, id FROM books")
     global books
     books = cmdBuff.fetchall()
     driver.commit()
-def Q_issueBook(bookName):
-    cmdBuff.execute("SELECT id FROM books WHERE name =\""+bookName+"\"")
+def Q_issueBook(bookID, memberID):
+    bookID = str(bookID)
+    memberID = str(memberID)
+    cmdBuff.execute("SELECT name FROM books WHERE id ="+bookID)
     result = cmdBuff.fetchall()
-    if result == []: return None
-    cmdBuff.execute("SELECT available FROM books WHERE id ="+str(result[0][0]))
+    if result == []: return "Invalid book ID"
+    cmdBuff.execute("SELECT book_id FROM issues WHERE member_id ="+memberID)
     result = cmdBuff.fetchall()
-    if result[0][0] == False: return False
+    if result != []: return "Member("+memberID+") has already borrowed a book"
+    cmdBuff.execute("INSERT INTO issues VALUES("+bookID+","+memberID+")")
+    cmdBuff.execute("UPDATE bookMetas SET i_count = i_count + 1 WHERE id="+bookID)
     driver.commit()
 
 def GshowBooks():
@@ -139,24 +148,31 @@ def GshowBooks():
         with gui.table(sortable=True, callback=_name_sort_callback, header_row=True, row_background=True, borders_outerH=True, borders_innerV=True, borders_outerV=True, resizable=True):
             gui.add_table_column(label="NAME")
             gui.add_table_column(label="ID", no_sort=True)
-            gui.add_table_column(label="AVAILABLE", no_sort=True)
             Q_getBooks()
             for i in books:
                 with gui.table_row():
-                    a = "true"
-                    if i[2] != True: a="false"
                     gui.add_text(i[0])
                     gui.add_text(i[1])
-                    gui.add_text(a)
 def Gidk():
     with gui.window(label="idk"):
         gui.add_button(label="show metrics", callback=lambda:gui.show_tool(gui.mvTool_Metrics))
         gui.add_button(label="show imgui demo", callback=lambda:demo.show_demo())
 
+def _setIssueData(sender, app_data, user_data):
+    global issueMemeberID
+    global issueBookID
+    if user_data == 0: issueMemeberID = app_data
+    else: issueBookID = app_data
+def _issueCallback(sender, app_data, user_data):
+    Q_issueBook(issueBookID, issueMemeberID)
+
 gui.create_context()
 gui.create_viewport()
 gui.setup_dearpygui()
 gui.show_viewport()
+with gui.font_registry(): default_font = gui.add_font("test/OpenSans.ttf", 19)
+gui.bind_font(gui.last_item())
+
 try:
     driver, cmdBuff = openDriverAndBuff()
 
@@ -172,8 +188,14 @@ try:
             Q_insertBookWithMeta(row[0], row[2], row[1], row[3], hid, True)
             hid += 1
 
+    print(Q_issueBook(1, 3))
     Gidk()
-    GshowBooks()
+    with gui.window(label="Manager"):
+        gui.add_button(label="show all books", callback=GshowBooks)
+        with gui.tree_node(label="issue"):
+            gui.add_input_int(label="memeber ID", callback=_setIssueData, user_data=0)
+            gui.add_input_int(label="book ID", callback=_setIssueData, user_data=1)
+            gui.add_button(label="issue", callback=_issueCallback)
     
     while gui.is_dearpygui_running(): gui.render_dearpygui_frame()
                     
