@@ -99,26 +99,32 @@ def Q_insertBookWithMeta(name, genre, authors, publisher, id, available):
     cmdBuff.execute("INSERT INTO books VALUES(\""+name+"\","+str(id)+")")
     cmdBuff.execute("INSERT INTO bookMetas VALUES("+str(id)+",\""+genre+"\",\""+authors+"\",\""+publisher+"\",0)")
     driver.commit()
-def Q_insertMember(name, id):
-    log("Inserting member:", name, id)
-    cmdBuff.execute("INSERT INTO members VALUES(\""+name+"\","+str(id)+")")
-    driver.commit()
 def Q_getHighestBookID():
     log("Getting highest book id")
     cmdBuff.execute("SELECT MAX(id) FROM books")
     result = cmdBuff.fetchall()
     driver.commit()
-    id = None
-    if result[0][0] == None: id = 0
-    else: id = result[0][0]
-    return id
+    if result[0][0] == None: return 0
+    return result[0][0]
+def Q_getHighestMemberID():
+    log("Getting highest member id")
+    cmdBuff.execute("SELECT MAX(id) FROM members")
+    result = cmdBuff.fetchall()
+    driver.commit()
+    if result[0][0] == None: return 0
+    return result[0][0]
 def Q_getBooks():
     log("Getting all books")
     cmdBuff.execute("SELECT name, id FROM books")
     global books
     books = cmdBuff.fetchall()
     driver.commit()
+def Q_newMember(name, id):
+    log("new member:",[name, id])
+    cmdBuff.execute("INSERT INTO members VALUES("+str(id)+",\""+name+"\")")
+    driver.commit()
 def Q_issueBook(bookID, memberID):
+    log("Issuing a book:",[bookID,memberID])
     bookID = str(bookID)
     memberID = str(memberID)
     cmdBuff.execute("SELECT name FROM books WHERE id ="+bookID)
@@ -130,6 +136,7 @@ def Q_issueBook(bookID, memberID):
     cmdBuff.execute("INSERT INTO issues VALUES("+bookID+","+memberID+")")
     cmdBuff.execute("UPDATE bookMetas SET i_count = i_count + 1 WHERE id="+bookID)
     driver.commit()
+    return "Issued!"
 
 def GshowBooks():
     with gui.window(label="books"):
@@ -158,19 +165,27 @@ def Gidk():
         gui.add_button(label="show metrics", callback=lambda:gui.show_tool(gui.mvTool_Metrics))
         gui.add_button(label="show imgui demo", callback=lambda:demo.show_demo())
 
-def _setIssueData(sender, app_data, user_data):
+def _setIssueData(sender, appData, userData):
     global issueMemeberID
     global issueBookID
-    if user_data == 0: issueMemeberID = app_data
-    else: issueBookID = app_data
-def _issueCallback(sender, app_data, user_data):
-    Q_issueBook(issueBookID, issueMemeberID)
+    if userData == 0: issueMemeberID = appData
+    else: issueBookID = appData
+def _setRegisterData(sender, appData, userData):
+    global registerMemberName
+    registerMemberName = appData
+def _issueCallback(sender, appData, userData):
+    hmm = Q_issueBook(issueBookID, issueMemeberID)
+    gui.set_value(userData, hmm)
+def _registerMember(sender, appData, userData):
+    if registerMemberName == "": return
+    Q_newMember(registerMemberName, Q_getHighestMemberID()+1)
+    gui.set_value(userData, "Registerd new member!")
 
 gui.create_context()
 gui.create_viewport()
 gui.setup_dearpygui()
 gui.show_viewport()
-with gui.font_registry(): default_font = gui.add_font("test/OpenSans.ttf", 19)
+with gui.font_registry(): gui.add_font("test/OpenSans.ttf", 19)
 gui.bind_font(gui.last_item())
 
 try:
@@ -185,17 +200,21 @@ try:
         reader = csv.reader(books)
         next(reader)
         for row in reader:
-            Q_insertBookWithMeta(row[0], row[2], row[1], row[3], hid, True)
             hid += 1
+            Q_insertBookWithMeta(row[0], row[2], row[1], row[3], hid, True)
 
-    print(Q_issueBook(1, 3))
     Gidk()
     with gui.window(label="Manager"):
         gui.add_button(label="show all books", callback=GshowBooks)
         with gui.tree_node(label="issue"):
             gui.add_input_int(label="memeber ID", callback=_setIssueData, user_data=0)
             gui.add_input_int(label="book ID", callback=_setIssueData, user_data=1)
-            gui.add_button(label="issue", callback=_issueCallback)
+            x = gui.add_text("")
+            gui.add_button(label="issue", callback=_issueCallback, user_data=x)
+        with gui.tree_node(label="New member"):
+            gui.add_input_text(label="name", callback=_setRegisterData)
+            x = gui.add_text("")
+            gui.add_button(label="register", callback=_registerMember, user_data=x)
     
     while gui.is_dearpygui_running(): gui.render_dearpygui_frame()
                     
