@@ -130,7 +130,10 @@ def Q_issueBook(bookID, memberID):
     cmdBuff.execute("SELECT name FROM books WHERE id ="+bookID)
     result = cmdBuff.fetchall()
     if result == []: return "Invalid book ID"
-    cmdBuff.execute("SELECT book_id FROM issues WHERE member_id ="+memberID)
+    cmdBuff.execute("SELECT member_id FROM issues WHERE book_id="+bookID)
+    result = cmdBuff.fetchall()
+    if result != []: return "Book has already been borrowed by member("+str(result[0][0])+")"
+    cmdBuff.execute("SELECT book_id FROM issues WHERE member_id="+memberID)
     result = cmdBuff.fetchall()
     if result != []: return "Member("+memberID+") has already borrowed a book"
     cmdBuff.execute("INSERT INTO issues VALUES("+bookID+","+memberID+")")
