@@ -10,11 +10,13 @@ Format of csv file
 Title, Authors, Genre, Publisher
 '''
 
+#config.txt file has username and password for MySQL
 try: f = open("config.txt", "r")
 except FileNotFoundError:
     print("config.txt file not found")
     exit()
-    
+
+#get username and password from config.txt
 username = None
 password = None
 for line in f:
@@ -23,19 +25,23 @@ for line in f:
         username = line[len("username:"):].lstrip().rstrip()
     elif(line.startswith("password:")):
         password = line[len("password:"):].lstrip().rstrip()
+f.close()
 
+#prints the time, and then prints all the arguments passed to it
 def log(*args):
     print(time.strftime("[%H:%M:%S] ", time.localtime()), end="")
     for arg in args: print(arg, end=" ")
     print()
 
+#check if config.txt has all required fields
 field = None
 if(username == None): field = "username"
 if(password == None): field = "password"
 if(field != None):
     log(field, "has to be defined int config.txt file")
     exit()
-    
+
+#parse command line arguments
 shouldCreateDB = False
 books = None
 for i in argv:
@@ -48,6 +54,7 @@ if books != None:
         print(books, "is not a valid path")
         exit()
 
+#functions to open and close connection to MySQL
 def openDriverAndBuff():
     log("Opening connection and command buffer")
     driver = connect(host="localhost", user=username, password=password)
@@ -57,6 +64,7 @@ def closeDriverAndBuff():
     cmdBuff.close()
     driver.close()
 
+#functions which execute MySQL
 def Q_createDB():
     log("Creating a new database")
     cmdBuff.execute("CREATE DATABASE library")
@@ -141,6 +149,7 @@ def Q_issueBook(bookID, memberID):
     driver.commit()
     return "Issued!"
 
+#GUI
 def GshowBooks():
     with gui.window(label="books"):
         def _name_sort_callback(sender, sort_specs):
@@ -168,6 +177,7 @@ def Gidk():
         gui.add_button(label="show metrics", callback=lambda:gui.show_tool(gui.mvTool_Metrics))
         gui.add_button(label="show imgui demo", callback=lambda:demo.show_demo())
 
+#these functions get called when user clicks on a GUI button
 def _setIssueData(sender, appData, userData):
     global issueMemeberID
     global issueBookID
@@ -184,6 +194,7 @@ def _registerMember(sender, appData, userData):
     Q_newMember(registerMemberName, Q_getHighestMemberID()+1)
     gui.set_value(userData, "Registerd new member!")
 
+#setup GUI
 gui.create_context()
 gui.create_viewport()
 gui.setup_dearpygui()
@@ -191,6 +202,7 @@ gui.show_viewport()
 with gui.font_registry(): gui.add_font("test/OpenSans.ttf", 19)
 gui.bind_font(gui.last_item())
 
+#main
 try:
     driver, cmdBuff = openDriverAndBuff()
 
@@ -205,6 +217,7 @@ try:
         for row in reader:
             hid += 1
             Q_insertBookWithMeta(row[0], row[2], row[1], row[3], hid, True)
+        books.close()
 
     Gidk()
     with gui.window(label="Manager"):
@@ -228,5 +241,6 @@ except Error as e:
     print("password:", password)
     exit()
 
+#cleanup
 closeDriverAndBuff()
 gui.destroy_context()
