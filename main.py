@@ -255,9 +255,9 @@ def Gidk():
 
 #these functions get called when user clicks on a GUI button
 def _setIssueData(sender, appData, userData):
-    global issueMemeberID
+    global issueMemberID
     global issueBookID
-    if userData == 0: issueMemeberID = appData
+    if userData == 0: issueMemberID = appData
     else: issueBookID = appData
 registerMemberAge = minAge
 def _setRegisterData(sender, appData, userData):
@@ -287,7 +287,7 @@ def _setRegisterBookData(sender, appData, userData):
     elif userData == 2: registerBookAuthors = appData
     else: registerBookPublisher = appData
 def _issueCallback(sender, appData, userData):
-    hmm = Q_issueBook(issueBookID, issueMemeberID)
+    hmm = Q_issueBook(issueBookID, issueMemberID)
     gui.set_value(userData, hmm)
 def _registerMember(sender, appData, userData):
     if registerMemberName == "": return
@@ -339,7 +339,7 @@ try:
             gui.add_button(label="show all books", callback=GshowBooks)
             gui.add_button(label="show all members", callback=GshowMembers)
         with gui.tree_node(label="issue"):
-            gui.add_input_int(label="memeber ID", callback=_setIssueData, user_data=0, min_value=0, min_clamped=True)
+            gui.add_input_int(label="member ID", callback=_setIssueData, user_data=0, min_value=0, min_clamped=True)
             gui.add_input_int(label="book ID", callback=_setIssueData, user_data=1, min_value=0, min_clamped=True)
             x = gui.add_text("")
             gui.add_button(label="issue", callback=_issueCallback, user_data=x)
