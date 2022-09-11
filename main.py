@@ -1,7 +1,7 @@
 import dearpygui.dearpygui as gui           #pip install dearpygui
 import dearpygui.demo as demo
 from mysql.connector import connect, Error  #pip install mysql-connector-python
-from sys import argv
+from sys import argv, exit
 import time
 import csv
 
