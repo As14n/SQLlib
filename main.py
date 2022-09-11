@@ -96,6 +96,13 @@ def Q_createDB():
     member_id  INT  NOT NULL
     )
     ''')
+    cmdBuff.execute('''
+    CREATE TABLE reviews(
+    book_id    INT     NOT NULL,
+    member_id  INT     NOT NULL,
+    stars      DOUBLE  NOT NULL
+    )
+    ''')
     driver.commit()
 def Q_dbContextInit():
     log("Setting up database context")
@@ -127,6 +134,12 @@ def Q_getBooks():
     global books
     books = cmdBuff.fetchall()
     driver.commit()
+def Q_getMembers():
+    log("Getting all members")
+    cmdBuff.execute("SELECT name, id FROM members")
+    global members
+    members = cmdBuff.fetchall()
+    driver.commit()
 def Q_newMember(name, id):
     log("new member:",[name, id])
     cmdBuff.execute("INSERT INTO members VALUES("+str(id)+",\""+name+"\")")
@@ -148,6 +161,31 @@ def Q_issueBook(bookID, memberID):
     cmdBuff.execute("UPDATE bookMetas SET i_count = i_count + 1 WHERE id="+bookID)
     driver.commit()
     return "Issued!"
+def Q_removeMember(id):
+    log("removing member:", id)
+    cmdBuff.execute("DELETE FROM members WHERE id="+str(id))
+    driver.commit()
+def Q_publishReview(bookID, memberID, stars):
+    log("publishing review:",[bookID, memberID, stars])
+    cmdBuff.execute("INSERT INTO reviews VALUES("+str(bookID)+","+str(memberID)+","+str(stars)+")")
+    driver.commit()
+def Q_getStars(bookID):
+    log("getting stars for bookID:", bookID)
+    cmdBuff.execute("SELECT stars FROM reviews WHERE book_id="+str(bookID))
+    result = cmdBuff.fetchall()
+    if result == []: return None
+    stars = 0
+    count = 0
+    for i in result:
+        stars += i[0]
+        count += 1
+    return stars/count
+def Q_getGenre(bookID):
+    log("getting genre for bookID:", bookID)
+    cmdBuff.execute("SELECT genre FROM bookMetas WHERE id="+str(bookID))
+    result = cmdBuff.fetchall()
+    driver.commit()
+    return result[0][0]
 
 #GUI
 def GshowBooks():
@@ -167,8 +205,35 @@ def GshowBooks():
         with gui.table(sortable=True, callback=_name_sort_callback, header_row=True, row_background=True, borders_outerH=True, borders_innerV=True, borders_outerV=True, resizable=True):
             gui.add_table_column(label="NAME")
             gui.add_table_column(label="ID", no_sort=True)
+            gui.add_table_column(label="GENRE", no_sort=True)
+            gui.add_table_column(label="STARS", no_sort=True)
             Q_getBooks()
             for i in books:
+                id = i[1]
+                with gui.table_row():
+                    gui.add_text(i[0])
+                    gui.add_text(i[1])
+                    gui.add_text(Q_getGenre(id))
+                    gui.add_text(Q_getStars(id))
+def GshowMembers():
+    with gui.window(label="members"):
+        def _name_sort_callback(sender, sort_specs):
+            if sort_specs is None: return
+            rows = gui.get_item_children(sender, 1)
+            sortable_list = []
+            for row in rows:
+                first_cell = gui.get_item_children(row, 1)[0]
+                sortable_list.append([row, gui.get_value(first_cell)])
+            def _sorter(e): return e[1]
+            sortable_list.sort(key=_sorter, reverse=sort_specs[0][1] < 0)
+            new_order = []
+            for pair in sortable_list: new_order.append(pair[0])
+            gui.reorder_items(sender, 1, new_order)
+        with gui.table(sortable=True, callback=_name_sort_callback, header_row=True, row_background=True, borders_outerH=True, borders_innerV=True, borders_outerV=True, resizable=True):
+            gui.add_table_column(label="NAME")
+            gui.add_table_column(label="ID", no_sort=True)
+            Q_getMembers()
+            for i in members:
                 with gui.table_row():
                     gui.add_text(i[0])
                     gui.add_text(i[1])
@@ -186,13 +251,30 @@ def _setIssueData(sender, appData, userData):
 def _setRegisterData(sender, appData, userData):
     global registerMemberName
     registerMemberName = appData
+def _setRemoveMemberData(sender, appData, userData):
+    global removeMemberID
+    removeMemberID = appData
+def _setReviewData(sender, appData, userData):
+    global reviewBookID
+    global reviewMemberID
+    global reviewStars
+    if userData == 0: reviewBookID = appData
+    elif userData == 1: reviewMemberID = appData
+    else: reviewStars = appData
 def _issueCallback(sender, appData, userData):
     hmm = Q_issueBook(issueBookID, issueMemeberID)
     gui.set_value(userData, hmm)
 def _registerMember(sender, appData, userData):
     if registerMemberName == "": return
-    Q_newMember(registerMemberName, Q_getHighestMemberID()+1)
-    gui.set_value(userData, "Registerd new member!")
+    id = Q_getHighestMemberID()+1
+    Q_newMember(registerMemberName, id)
+    gui.set_value(userData, "Registered new member! Your ID: "+str(id))
+def _removeMember(sender, appData, userData):
+    Q_removeMember(removeMemberID)
+    gui.set_value(userData, "Removed member: "+str(removeMemberID))
+def _publishReview(sender, appData, userData):
+    Q_publishReview(reviewBookID, reviewMemberID, reviewStars)
+    gui.set_value(userData, "Review published!")
 
 #setup GUI
 gui.create_context()
@@ -221,16 +303,28 @@ try:
 
     Gidk()
     with gui.window(label="Manager"):
-        gui.add_button(label="show all books", callback=GshowBooks)
+        with gui.group(horizontal=True):
+            gui.add_button(label="show all books", callback=GshowBooks)
+            gui.add_button(label="show all members", callback=GshowMembers)
         with gui.tree_node(label="issue"):
-            gui.add_input_int(label="memeber ID", callback=_setIssueData, user_data=0)
-            gui.add_input_int(label="book ID", callback=_setIssueData, user_data=1)
+            gui.add_input_int(label="memeber ID", callback=_setIssueData, user_data=0, min_value=0, min_clamped=True)
+            gui.add_input_int(label="book ID", callback=_setIssueData, user_data=1, min_value=0, min_clamped=True)
             x = gui.add_text("")
             gui.add_button(label="issue", callback=_issueCallback, user_data=x)
         with gui.tree_node(label="New member"):
             gui.add_input_text(label="name", callback=_setRegisterData)
             x = gui.add_text("")
             gui.add_button(label="register", callback=_registerMember, user_data=x)
+        with gui.tree_node(label="Remove member"):
+            gui.add_input_int(label="id", callback=_setRemoveMemberData, min_value=0, min_clamped=True)
+            x = gui.add_text("")
+            gui.add_button(label="remove", callback=_removeMember, user_data=x)
+        with gui.tree_node(label="Add book review"):
+            gui.add_input_int(label="book id", callback=_setReviewData, user_data=0, min_value=0, min_clamped=True)
+            gui.add_input_int(label="member id", callback=_setReviewData, user_data=1, min_value=0, min_clamped=True)
+            gui.add_input_double(label="stars", callback=_setReviewData, user_data=2, min_value=0, max_value=5, min_clamped=True, max_clamped=True)
+            x = gui.add_text("")
+            gui.add_button(label="publish", callback=_publishReview, user_data=x)
     
     while gui.is_dearpygui_running(): gui.render_dearpygui_frame()
                     
