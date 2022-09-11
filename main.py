@@ -19,12 +19,15 @@ except FileNotFoundError:
 #get username and password from config.txt
 username = None
 password = None
+minAge = None
 for line in f:
     if(line[0] == '#'): continue
     if(line.startswith("username:")):
         username = line[len("username:"):].lstrip().rstrip()
     elif(line.startswith("password:")):
         password = line[len("password:"):].lstrip().rstrip()
+    elif(line.startswith("min_age:")):
+        minAge = int(line[len("min_age:"):].lstrip().rstrip())
 f.close()
 
 #prints the time, and then prints all the arguments passed to it
@@ -37,6 +40,7 @@ def log(*args):
 field = None
 if(username == None): field = "username"
 if(password == None): field = "password"
+if(minAge == None): field = "min_age"
 if(field != None):
     log(field, "has to be defined int config.txt file")
     exit()
@@ -64,6 +68,8 @@ def closeDriverAndBuff():
     cmdBuff.close()
     driver.close()
 
+hbid = None
+hmid = None
 #functions which execute MySQL
 def Q_createDB():
     log("Creating a new database")
@@ -77,8 +83,10 @@ def Q_createDB():
     ''')
     cmdBuff.execute('''
     CREATE TABLE members(
-    id        INT          NOT NULL PRIMARY KEY,
-    name      VARCHAR(30)  NOT NULL
+    id              INT          NOT NULL PRIMARY KEY,
+    name            VARCHAR(30)  NOT NULL,
+    age             INT          NOT NULL,
+    prefered_genre  VARCHAR(30)  NOT NULL
     )
     ''')
     cmdBuff.execute('''
@@ -136,13 +144,13 @@ def Q_getBooks():
     driver.commit()
 def Q_getMembers():
     log("Getting all members")
-    cmdBuff.execute("SELECT name, id FROM members")
+    cmdBuff.execute("SELECT name, id, age, prefered_genre FROM members")
     global members
     members = cmdBuff.fetchall()
     driver.commit()
-def Q_newMember(name, id):
+def Q_newMember(name, id, age, preferedGenre):
     log("new member:",[name, id])
-    cmdBuff.execute("INSERT INTO members VALUES("+str(id)+",\""+name+"\")")
+    cmdBuff.execute("INSERT INTO members VALUES("+str(id)+",\""+name+"\","+str(age)+",\""+preferedGenre.lower()+"\")")
     driver.commit()
 def Q_issueBook(bookID, memberID):
     log("Issuing a book:",[bookID,memberID])
@@ -197,8 +205,7 @@ def GshowBooks():
             for row in rows:
                 first_cell = gui.get_item_children(row, 1)[0]
                 sortable_list.append([row, gui.get_value(first_cell)])
-            def _sorter(e): return e[1]
-            sortable_list.sort(key=_sorter, reverse=sort_specs[0][1] < 0)
+            sortable_list.sort(reverse=sort_specs[0][1] < 0)
             new_order = []
             for pair in sortable_list: new_order.append(pair[0])
             gui.reorder_items(sender, 1, new_order)
@@ -232,11 +239,15 @@ def GshowMembers():
         with gui.table(sortable=True, callback=_name_sort_callback, header_row=True, row_background=True, borders_outerH=True, borders_innerV=True, borders_outerV=True, resizable=True):
             gui.add_table_column(label="NAME")
             gui.add_table_column(label="ID", no_sort=True)
+            gui.add_table_column(label="AGE", no_sort=True)
+            gui.add_table_column(label="PREFERED_GENRE", no_sort=True)
             Q_getMembers()
             for i in members:
                 with gui.table_row():
                     gui.add_text(i[0])
                     gui.add_text(i[1])
+                    gui.add_text(i[2])
+                    gui.add_text(i[3])
 def Gidk():
     with gui.window(label="idk"):
         gui.add_button(label="show metrics", callback=lambda:gui.show_tool(gui.mvTool_Metrics))
@@ -248,9 +259,14 @@ def _setIssueData(sender, appData, userData):
     global issueBookID
     if userData == 0: issueMemeberID = appData
     else: issueBookID = appData
+registerMemberAge = minAge
 def _setRegisterData(sender, appData, userData):
     global registerMemberName
-    registerMemberName = appData
+    global registerMemberAge
+    global registerMemberPreferedGenre
+    if userData == 0: registerMemberName = appData
+    elif userData == 1: registerMemberAge = appData
+    else: registerMemberPreferedGenre = appData
 def _setRemoveMemberData(sender, appData, userData):
     global removeMemberID
     removeMemberID = appData
@@ -261,24 +277,39 @@ def _setReviewData(sender, appData, userData):
     if userData == 0: reviewBookID = appData
     elif userData == 1: reviewMemberID = appData
     else: reviewStars = appData
+def _setRegisterBookData(sender, appData, userData):
+    global registerBookName
+    global registerBookGenre
+    global registerBookAuthors
+    global registerBookPublisher
+    if userData == 0: registerBookName = appData
+    elif userData == 1: registerBookGenre = appData
+    elif userData == 2: registerBookAuthors = appData
+    else: registerBookPublisher = appData
 def _issueCallback(sender, appData, userData):
     hmm = Q_issueBook(issueBookID, issueMemeberID)
     gui.set_value(userData, hmm)
 def _registerMember(sender, appData, userData):
     if registerMemberName == "": return
-    id = Q_getHighestMemberID()+1
-    Q_newMember(registerMemberName, id)
-    gui.set_value(userData, "Registered new member! Your ID: "+str(id))
+    global hmid
+    hmid += 1
+    Q_newMember(registerMemberName, hmid, registerMemberAge, registerMemberPreferedGenre)
+    gui.set_value(userData, "Registered new member! Your ID: "+str(hmid))
 def _removeMember(sender, appData, userData):
     Q_removeMember(removeMemberID)
     gui.set_value(userData, "Removed member: "+str(removeMemberID))
 def _publishReview(sender, appData, userData):
     Q_publishReview(reviewBookID, reviewMemberID, reviewStars)
     gui.set_value(userData, "Review published!")
+def _registerBook(sender, appData, userData):
+    global hbid
+    hbid += 1
+    Q_insertBookWithMeta(registerBookName, registerBookGenre, registerBookAuthors, registerBookPublisher, hbid, True)
+    gui.set_value(userData, registerBookName+" is registered with ID: "+str(hbid))
 
 #setup GUI
 gui.create_context()
-gui.create_viewport()
+gui.create_viewport(title="SQLlib")
 gui.setup_dearpygui()
 gui.show_viewport()
 with gui.font_registry(): gui.add_font("test/OpenSans.ttf", 19)
@@ -291,18 +322,19 @@ try:
     if(shouldCreateDB): Q_createDB()
     else: Q_dbContextInit()
     
-    hid = Q_getHighestBookID()
+    hbid = Q_getHighestBookID()
+    hmid = Q_getHighestMemberID()
     
     if(books != None):
         reader = csv.reader(books)
         next(reader)
         for row in reader:
-            hid += 1
-            Q_insertBookWithMeta(row[0], row[2], row[1], row[3], hid, True)
+            hbid += 1
+            Q_insertBookWithMeta(row[0], row[2], row[1], row[3], hbid, True)
         books.close()
 
     Gidk()
-    with gui.window(label="Manager"):
+    with gui.window(label="Manager", no_close=True):
         with gui.group(horizontal=True):
             gui.add_button(label="show all books", callback=GshowBooks)
             gui.add_button(label="show all members", callback=GshowMembers)
@@ -312,7 +344,9 @@ try:
             x = gui.add_text("")
             gui.add_button(label="issue", callback=_issueCallback, user_data=x)
         with gui.tree_node(label="New member"):
-            gui.add_input_text(label="name", callback=_setRegisterData)
+            gui.add_input_text(label="name", callback=_setRegisterData, user_data=0)
+            gui.add_input_int(label="age", callback=_setRegisterData, user_data=1, min_value=minAge, min_clamped=True, default_value=minAge)
+            gui.add_input_text(label="prefered genre", callback=_setRegisterData, user_data=2)
             x = gui.add_text("")
             gui.add_button(label="register", callback=_registerMember, user_data=x)
         with gui.tree_node(label="Remove member"):
@@ -325,6 +359,13 @@ try:
             gui.add_input_double(label="stars", callback=_setReviewData, user_data=2, min_value=0, max_value=5, min_clamped=True, max_clamped=True)
             x = gui.add_text("")
             gui.add_button(label="publish", callback=_publishReview, user_data=x)
+        with gui.tree_node(label="Register new book"):
+            gui.add_input_text(label="book name", callback=_setRegisterBookData, user_data=0)
+            gui.add_input_text(label="genre", callback=_setRegisterBookData, user_data=1)
+            gui.add_input_text(label="authors", callback=_setRegisterBookData, user_data=2)
+            gui.add_input_text(label="publisher", callback=_setRegisterBookData, user_data=3)
+            x = gui.add_text("")
+            gui.add_button(label="register", callback=_registerBook, user_data=x)
     
     while gui.is_dearpygui_running(): gui.render_dearpygui_frame()
                     

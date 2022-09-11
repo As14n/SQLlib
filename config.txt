@@ -3,3 +3,5 @@
 username: root
 #password
 password: dba123
+#minimum age to be a member
+min_age: 15
